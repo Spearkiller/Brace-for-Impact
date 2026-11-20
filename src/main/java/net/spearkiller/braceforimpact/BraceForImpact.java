@@ -2,6 +2,7 @@ package net.spearkiller.braceforimpact;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.level.GameRules;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -26,15 +27,19 @@ public class BraceforImpact {
     public static final String MODID = "braceforimpact";
     public static final Logger LOGGER = LogUtils.getLogger();
 
-    public static final float MIN_DAMAGE_REDUCTION = 0f;
-    public static final float MAX_DAMAGE_REDUCTION = 3.0f; //TODO make it so damage reduced is greater the closer the diff is to 0?
-    public static final int GRACE_PERIOD_IN_TICKS = 5; //10 ticks, so, half a second. TODO: make this configurable
-
     private static HashMap<UUID, Long> crouchTicks = new HashMap<>();
 
     public BraceforImpact(IEventBus modEventBus, ModContainer modContainer) {
         //I don't think I need anything here until I set up config?
     }
+
+    //How many ticks before landing can the player press shift to prevent (some) damage
+    public static final  GameRules.Key<GameRules.IntegerValue> BRACE_TICK_AMOUNT =
+            GameRules.register("maxFallBraceTickTime", GameRules.Category.PLAYER, GameRules.IntegerValue.create(3));
+
+    //How much health (in half-hearts) should be subtracted from the fall damage.
+    public static final  GameRules.Key<GameRules.IntegerValue> BRACE_MAX_REDUCTION =
+            GameRules.register("maxFallBraceDamageReduction", GameRules.Category.PLAYER, GameRules.IntegerValue.create(4));
 
     @EventBusSubscriber(modid = BraceforImpact.MODID)
     public static class ServerModEvents {
@@ -66,18 +71,16 @@ public class BraceforImpact {
          */
         public static float calcDamageReduction(ServerPlayer player, float incoming){
 
-            //Sooooo what do we need to do here
-            //GRACE_PERIOD_IN_TICKS is the maximum amount of time that the player can crouch for before they take full damage
-            //MAX_DAMAGE_REDUCTION is the most damage that can be reduced
-            //MIN_DAMAGE_REDUCTION is the least (which is 0 by default (suck it up noob))
+            int maxFallReduction = player.level().getGameRules().getRule(BRACE_MAX_REDUCTION).get();
+            int maxGracePeriod = player.level().getGameRules().getRule(BRACE_TICK_AMOUNT).get();
 
-            //time keeps ticking up... how to calculate that MATH IS HARD
+
             long lastCrouchTime = crouchTicks.getOrDefault(player.getUUID(), -1L);
             if (lastCrouchTime == -1L) return incoming;
 
             long diff = player.level().getGameTime() - lastCrouchTime;
-            if (diff <= GRACE_PERIOD_IN_TICKS){
-                return Math.max(0, incoming-MAX_DAMAGE_REDUCTION);
+            if (diff <= maxGracePeriod){
+                return Math.max(0, incoming-maxFallReduction);
             }
 
             return incoming;
