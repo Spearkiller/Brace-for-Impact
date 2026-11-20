@@ -35,7 +35,7 @@ public class BraceforImpact {
 
     //How many ticks before landing can the player press shift to prevent (some) damage
     public static final  GameRules.Key<GameRules.IntegerValue> BRACE_TICK_AMOUNT =
-            GameRules.register("maxFallBraceTickTime", GameRules.Category.PLAYER, GameRules.IntegerValue.create(3));
+            GameRules.register("maxFallBraceTickTime", GameRules.Category.PLAYER, GameRules.IntegerValue.create(1));
 
     //How much health (in half-hearts) should be subtracted from the fall damage.
     public static final  GameRules.Key<GameRules.IntegerValue> BRACE_MAX_REDUCTION =
@@ -79,7 +79,10 @@ public class BraceforImpact {
             if (lastCrouchTime == -1L) return incoming;
 
             long diff = player.level().getGameTime() - lastCrouchTime;
-            if (diff <= maxGracePeriod){
+
+            boolean crouchedBetweenTicks = (player.isCrouching() && !crouchTicks.containsKey(player.getUUID()));
+
+            if (diff <= maxGracePeriod || crouchedBetweenTicks){
                 return Math.max(0, incoming-maxFallReduction);
             }
 
