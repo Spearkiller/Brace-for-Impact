@@ -5,6 +5,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.common.damagesource.DamageContainer;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -25,6 +26,7 @@ public class BraceforImpact {
     public static final String MODID = "braceforimpact";
     public static final Logger LOGGER = LogUtils.getLogger();
 
+    public static final float MIN_DAMAGE_REDUCTION = 0f;
     public static final float MAX_DAMAGE_REDUCTION = 3.0f; //TODO make it so damage reduced is greater the closer the diff is to 0?
     public static final int GRACE_PERIOD_IN_TICKS = 5; //10 ticks, so, half a second. TODO: make this configurable
 
@@ -55,44 +57,60 @@ public class BraceforImpact {
         }
 
 
-        @SubscribeEvent
+        /**
+         * Helper method for modifying incoming damage.
+         * Doesn't account for time right now, but
+         * @param player
+         * @param incoming
+         * @return
+         */
+        public static float calcDamageReduction(ServerPlayer player, float incoming){
+
+            //Sooooo what do we need to do here
+            //GRACE_PERIOD_IN_TICKS is the maximum amount of time that the player can crouch for before they take full damage
+            //MAX_DAMAGE_REDUCTION is the most damage that can be reduced
+            //MIN_DAMAGE_REDUCTION is the least (which is 0 by default (suck it up noob))
+
+            //time keeps ticking up... how to calculate that MATH IS HARD
+            long lastCrouchTime = crouchTicks.getOrDefault(player.getUUID(), -1L);
+            if (lastCrouchTime == -1L) return incoming;
+
+            long diff = player.level().getGameTime() - lastCrouchTime;
+            if (diff <= GRACE_PERIOD_IN_TICKS){
+                return Math.max(0, incoming-MAX_DAMAGE_REDUCTION);
+            }
+
+            return incoming;
+        }
+
+        /*@SubscribeEvent
         public static void onLivingFall(LivingDamageEvent.Pre event) {
             if (!(event.getEntity() instanceof ServerPlayer sp)) return;
             if (sp.level().isClientSide()) return; //Probably not needed???
             if (!event.getSource().is(DamageTypeTags.IS_FALL)) return;
 
-            if (crouchTicks.containsKey(sp.getUUID())) {
-                long firstCrouch = crouchTicks.get(sp.getUUID());
+            float newDamage = calcDamageReduction(sp, event.getOriginalDamage());
+            BraceforImpact.LOGGER.debug("Incoming damage is " + event.getOriginalDamage());
+            BraceforImpact.LOGGER.debug("New damage is " + newDamage);
 
-                long diff = sp.level().getGameTime() - firstCrouch;
-                BraceforImpact.LOGGER.debug("Diff of " + sp.getUUID() + " crouching is " + diff);
-                if (diff <= GRACE_PERIOD_IN_TICKS) {
-                    float dmg = Math.max(0, event.getOriginalDamage() - MAX_DAMAGE_REDUCTION);
-                    BraceforImpact.LOGGER.debug("Old damage of " + sp.getUUID() + " is " + event.getOriginalDamage());
-                    event.setNewDamage(dmg);
-                    BraceforImpact.LOGGER.debug("New damage of " + sp.getUUID() + " is " + event.getNewDamage());
-                }
-            }
-        }
+            event.setNewDamage(newDamage);
+        }*/
 
-        //Dirty hack to fix some UI/UX things. I do wonder if I could do it all here and don't know why I don't rn.
-        //TODO: change that?
+        //I think this is fine to use instead of onLivingFall
+        //This assumes the player will already be taking some damage, we're just... tweaking it?
         @SubscribeEvent
         public static void onIncomingDamage(LivingIncomingDamageEvent event){
             if (!(event.getEntity() instanceof ServerPlayer sp)) return;
             if (sp.level().isClientSide()) return; //Probably not needed???
             if (!event.getSource().is(DamageTypeTags.IS_FALL)) return;
 
-            long firstCrouch = crouchTicks.getOrDefault(sp.getUUID(), -1L);
-            if (firstCrouch == -1) return;
-            long diff = sp.level().getGameTime() - firstCrouch;
+            float newDamage = calcDamageReduction(sp, event.getOriginalAmount());
 
-            BraceforImpact.LOGGER.debug("Incoming damage is " + event.getAmount()); //This doesn't get the right value
-            BraceforImpact.LOGGER.debug("Diff is " + diff);
-            BraceforImpact.LOGGER.debug("Crouch timer contains player: " + crouchTicks.containsKey(sp.getUUID()));
-            //Probably all the relevant checks
-            if (crouchTicks.containsKey(sp.getUUID()) && event.getAmount() <= 0 && diff <= GRACE_PERIOD_IN_TICKS) {
-                BraceforImpact.LOGGER.debug("Cancelling damage");
+            if (newDamage > 0){
+                event.setAmount(newDamage);
+            }
+            else {
+                event.setAmount(0);
                 event.setCanceled(true);
             }
         }
